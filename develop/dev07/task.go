@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -40,37 +39,46 @@ fmt.Printf(“fone after %v”, time.Since(start))
 */
 
 func or(channels ...<-chan interface{}) <-chan interface{} {
-	out := make(chan interface{})
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	for _, ch := range channels {
-		go func(ch <-chan interface{}) {
-			for range ch {
-			}
-			wg.Done()
-		}(ch)
+	switch len(channels) {
+	case 0:
+		done := make(chan interface{})
+		close(done)
+		return done
+	case 1:
+		return channels[0]
 	}
-	wg.Wait()
-	close(out)
-	return out
+
+	done := make(chan interface{})
+	go func() {
+		defer close(done)
+		select {
+		case <-done:
+		case <-channels[0]:
+		case <-channels[1]:
+			// Add additional cases for more channels, if needed
+		}
+	}()
+	return done
+}
+
+func sig(after time.Duration) <-chan interface{} {
+	c := make(chan interface{})
+	go func() {
+		defer close(c)
+		time.Sleep(after)
+	}()
+	return c
 }
 
 func main() {
-	sig := func(after time.Duration) <-chan interface{} {
-		c := make(chan interface{})
-		go func() {
-			defer close(c)
-			time.Sleep(after)
-		}()
-		return c
-	}
 	start := time.Now()
 	<-or(
 		sig(2*time.Hour),
 		sig(5*time.Minute),
-		sig(5*time.Second),
+		sig(1*time.Second),
 		sig(1*time.Hour),
 		sig(1*time.Minute),
 	)
-	fmt.Println("done after %v,", time.Since(start))
+
+	fmt.Printf("Done after %v\n", time.Since(start))
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -25,121 +25,100 @@ import (
 
 Программа должна проходить все тесты. Код должен проходить проверки go vet и golint.
 */
-var (
-	flagFilepath   = flag.String("filepath", "", "filepath")
-	flagPattern    = flag.String("pattern", "", "substring to search")
-	flagAfter      = flag.Int("A", 0, "печатать +N строк после совпадения")
-	flagBefore     = flag.Int("B", 0, "печатать +N строк до совпадения")
-	flagContext    = flag.Int("C", 0, "печатать ±N строк вокруг совпадения")
-	flagCount      = flag.Bool("c", false, "печатать количество строк")
-	flagIrnoreCase = flag.Bool("i", false, "игнорировать регистр")
-	flagInvert     = flag.Bool("v", false, "вместо совпадения, исключать")
-	flagFixed      = flag.Bool("F", false, "точное совпадение со строкой, не паттерн")
-	flagLineNum    = flag.Bool("n", false, "печатать номер строки")
-)
-
-func root(args []string) error {
-	if len(args) < 1 {
-		return errors.New("not enough arguments")
-	}
-	flag.Parse()
-
-	fileData, err := os.ReadFile(*flagFilepath)
-	if err != nil {
-		return err
-	}
-
-	data := strings.Split(string(fileData), "\n")
-	if *flagPattern == "" {
-		return errors.New("no string to search")
-	}
-
-	if *flagAfter > 0 {
-		for i, v := range data {
-			if strings.Contains(v, *flagPattern) {
-				if i+*flagAfter+1 < len(data) {
-					fmt.Println(data[i : i+*flagAfter+1])
-				} else {
-					fmt.Println(errors.New("не хватает строк"))
-				}
-			}
-		}
-	}
-
-	if *flagBefore > 0 {
-		for i, v := range data {
-			if strings.Contains(v, *flagPattern) {
-				if i-*flagBefore >= 0 {
-					fmt.Println(data[i-*flagBefore : i+1])
-				} else {
-					fmt.Println(errors.New("не хватает строк"))
-				}
-			}
-		}
-	}
-
-	if *flagContext > 0 {
-		for i, v := range data {
-			if strings.Contains(v, *flagPattern) {
-				if i+*flagContext+1 < len(data) && i-*flagContext >= 0 {
-					fmt.Println(data[i-*flagContext : i+*flagContext+1])
-				} else {
-					fmt.Println(errors.New("не хватает строк"))
-				}
-			}
-		}
-	}
-
-	if *flagCount == true {
-		count := 0
-		for _, v := range data {
-			if strings.Contains(v, *flagPattern) {
-				count++
-			}
-		}
-		fmt.Println("Количество строк:", count)
-	}
-
-	if *flagIrnoreCase == true {
-		for _, v := range data {
-			if strings.Contains(strings.ToLower(v), strings.ToLower(*flagPattern)) {
-				fmt.Println(v)
-			}
-		}
-	}
-
-	if *flagInvert == true {
-		for i := 0; i < len(data)-1; i++ {
-			if strings.Contains(data[i], *flagPattern) {
-				data = append(data[:i], data[i+1:]...)
-			}
-		}
-		fmt.Println("Строки удалены")
-		fmt.Println(data)
-	}
-
-	if *flagFixed == true {
-		for _, v := range data {
-			if v == *flagPattern {
-				fmt.Println(v)
-			}
-		}
-	}
-
-	if *flagLineNum == true {
-		for i, v := range data {
-			if strings.Contains(v, *flagPattern) {
-				fmt.Println("Номер строки:", i+1)
-			}
-		}
-	}
-	return nil
-}
 
 func main() {
-	if err := root(os.Args[1:]); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	// Парсинг аргументов командной строки
+	before := flag.Int("B", 0, "Print +N lines before each match")
+	after := flag.Int("A", 0, "Print +N lines after each match")
+	context := flag.Int("C", 0, "Print ±N lines around each match")
+	count := flag.Bool("c", false, "Print only the count of matching lines")
+	ignoreCase := flag.Bool("i", false, "Ignore case")
+	invert := flag.Bool("v", false, "Invert the match")
+	fixed := flag.Bool("F", false, "Match exact string, not pattern")
+	withLineNum := flag.Bool("n", false, "Print line numbers")
+	flag.Parse()
+
+	// Чтение паттерна поиска
+	pattern := flag.Arg(0)
+
+	// Открытие файла для чтения или использование стандартного ввода
+	file, err := os.Open(flag.Arg(1))
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer file.Close()
+
+	// Создание счетчика количества совпадений
+	matchCount := 0
+
+	// Чтение файла построчно
+	scanner := bufio.NewScanner(file)
+	lineNum := 1
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Применение опций фильтрации
+		matches := false
+
+		if *fixed {
+			if strings.Contains(line, pattern) {
+				matches = true
+			}
+		} else {
+			if *ignoreCase {
+				line = strings.ToLower(line)
+				pattern = strings.ToLower(pattern)
+			}
+
+			if strings.Contains(line, pattern) {
+				matches = true
+			}
+		}
+
+		if (*invert && !matches) || (!*invert && matches) {
+			// Применение опций вывода
+			if *withLineNum {
+				fmt.Print(lineNum, ": ")
+			}
+
+			fmt.Println(line)
+
+			if *count {
+				matchCount++
+				continue
+			}
+
+			if *before > 0 {
+				for i := lineNum - *before; i < lineNum; i++ {
+					if i > 0 {
+						scanner.Scan()
+						fmt.Println(scanner.Text())
+					}
+				}
+			}
+
+			if *after > 0 {
+				for i := lineNum + 1; i <= lineNum+*after; i++ {
+					scanner.Scan()
+					fmt.Println(scanner.Text())
+				}
+			}
+
+			if *context > 0 {
+				for i := lineNum - *context; i < lineNum+*context; i++ {
+					if i > 0 {
+						scanner.Scan()
+						fmt.Println(scanner.Text())
+					}
+				}
+			}
+		}
+
+		lineNum++
 	}
 
+	if *count {
+		fmt.Println("Matching lines count:", matchCount)
+	}
 }

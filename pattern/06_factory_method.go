@@ -2,34 +2,80 @@ package main
 
 import "fmt"
 
-// Product interface
-type Product interface {
-	Use() string
+type iGun interface {
+	setName(name string)
+	setPower(power int)
+	getName() string
+	getPower() int
 }
 
-// ConcreteProduct struct
-type ConcreteProduct struct{}
-
-// Use method for ConcreteProduct
-func (p *ConcreteProduct) Use() string {
-	return "Using ConcreteProduct"
+type Gun struct {
+	Name  string
+	Power int
 }
 
-// Creator interface
-type Creator interface {
-	CreateProduct() Product
+func (g *Gun) setName(name string) {
+	g.Name = name
 }
 
-// ConcreteCreator struct
-type ConcreteCreator struct{}
+func (g *Gun) setPower(power int) {
+	g.Power = power
+}
 
-// CreateProduct method for ConcreteCreator
-func (c *ConcreteCreator) CreateProduct() Product {
-	return &ConcreteProduct{}
+func (g *Gun) getName() string {
+	return g.Name
+}
+
+func (g *Gun) getPower() int {
+	return g.Power
+}
+
+type AK47 struct {
+	Gun
+}
+
+func NewAK47() iGun {
+	return &AK47{
+		Gun{
+			"AK47",
+			100,
+		},
+	}
+}
+
+type Musket struct {
+	Gun
+}
+
+func NewMusket() iGun {
+	return &Musket{
+		Gun: Gun{
+			"Musket",
+			500,
+		},
+	}
+}
+
+func getGun(gunType string) (iGun, error) {
+	switch gunType {
+	case "ak47":
+		return NewAK47(), nil
+	case "musket":
+		return NewMusket(), nil
+	default:
+		return nil, fmt.Errorf("Unknown gun")
+	}
 }
 
 func main() {
-	creator := &ConcreteCreator{}
-	product := creator.CreateProduct()
-	fmt.Println(product.Use())
+	g1, err := getGun("ak47")
+	fmt.Println(g1.getName())
+
+	g2, err := getGun("musket")
+	fmt.Println(g2.getName())
+
+	_, err = getGun("something")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 }

@@ -16,9 +16,10 @@ go-telnet --timeout=10s host port go-telnet mysite.ru 8080 go-telnet --timeout=3
 */
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -27,68 +28,47 @@ import (
 )
 
 func main() {
-
 	timeout := flag.Duration("timeout", 10*time.Second, "connection timeout")
 	flag.Parse()
 
 	args := flag.Args()
-
 	if len(args) != 2 {
-		fmt.Println("Usage: go-telnet [--timeout=<duration>] <host> <port>")
+		fmt.Println("Usage: go-telnet [--timeout=<timeout>] host port")
 		os.Exit(1)
 	}
 
 	host := args[0]
 	port := args[1]
 
-	conn, err := net.DialTimeout("tcp", host+":"+port, *timeout)
+	// Устанавливаем сигнальный обработчик для завершения при нажатии Ctrl+C
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Устанавливаем таймаут для подключения
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), *timeout)
 	if err != nil {
 		fmt.Println("Failed to connect:", err)
 		os.Exit(1)
 	}
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(conn)
 
-	defer func() { _ = conn.Close() }()
-
-	go handleSignal(conn)
-
-	if err := handleConnection(conn); err != nil {
-		panic(err)
+	// Отправляем STDIN в сокет и печатаем данные из сокета в STDOUT
+	go func() {
+		_, err := io.Copy(conn, os.Stdin)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+	_, err = io.Copy(os.Stdout, conn)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-}
-
-// handleConnection функция обработчик соединения
-func handleConnection(conn net.Conn) error {
-
-	for {
-		reader := bufio.NewReader(os.Stdin)
-		request, err := reader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-
-		if _, err := fmt.Fprintf(conn, request+"\n"); err != nil {
-			return err
-		}
-
-		response, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
-			return err
-		}
-
-		fmt.Println(response)
-	}
-}
-
-// handleSignal функция обработчик обработчик сигнала для заакрытия соединения
-func handleSignal(conn net.Conn) {
-
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGTERM)
-
-	<-signals
-	// Закрытие сокета при получении сигнала
-	func() { _ = conn.Close() }()
-	os.Exit(0)
-
+	// Ждем сигнала завершения или закрытия со стороны сервера
+	<-signalChan
 }

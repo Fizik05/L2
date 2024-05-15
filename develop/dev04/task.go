@@ -1,11 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"sort"
-	"strings"
-)
-
 /*
 === Поиск анаграмм по словарю ===
 
@@ -21,66 +15,54 @@ import (
 Множества из одного элемента не должны попасть в результат.
 Все слова должны быть приведены к нижнему регистру.
 В результате каждое слово должно встречаться только один раз.
+
+Программа должна проходить все тесты. Код должен проходить проверки go vet и golint.
 */
 
-// SearchAnagrams возвращает мапу множеств анаграмм
-func SearchAnagrams(elems *[]string) *map[string]*[]string {
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
-	anagrams := make(map[string]*[]string) //мапа анаграм
+func findAnagramSets(words *[]string) *map[string][]string {
+	anagramSets := make(map[string][]string)
 
-	for _, elem := range *elems {
-		elem = strings.ToLower(elem) //нижний регистр
-		sortedElem := sortWord(elem) //сортировка строки
+	for _, word := range *words {
+		// Приводим слово к нижнему регистру
+		word = strings.ToLower(word)
 
-		if _, exist := anagrams[sortedElem]; !exist { //если ключа нет - создаем слайс из 1 элемента и кладем в значение ссылку
-			anagrams[sortedElem] = &[]string{elem}
-		} else { //добавление по ключу слова в слайс анаграмм
-			*anagrams[sortedElem] = append(*anagrams[sortedElem], elem)
+		// Создаем сортируемую версию слова
+		sortedWord := sortString(word)
+
+		// Добавляем слово в множество анаграмм
+		anagramSets[sortedWord] = append(anagramSets[sortedWord], word)
+	}
+
+	// Удаляем множества из одного элемента
+	for key, value := range anagramSets {
+		if len(value) == 1 {
+			delete(anagramSets, key)
 		}
 	}
 
-	result := make(map[string]*[]string)
-	for _, words := range anagrams {
-		correctKey := (*words)[0]           //первое в словаре слово для конкретного множества
-		words = removeDuplicateWords(words) //удалили дубликаты
-
-		if len(*words) > 1 { //анаграмм нет если всего 1 значение в слайсе - удаляем
-			sort.Strings(*words)       // сортировка строк по алфавиту
-			result[correctKey] = words //запись в результирующую мапу
-		}
-
-	}
-
-	return &result
+	return &anagramSets
 }
 
-// sortWord сортирует символы в строке в алфавитном порядке
-func sortWord(word string) string {
-	rword := []rune(word)
-	sort.Slice(rword, func(i, j int) bool {
-		return rword[i] < rword[j]
-	})
-
-	return string(rword)
-}
-
-// removeDuplicateWords удаляет повторы
-func removeDuplicateWords(words *[]string) *[]string {
-	m := make(map[string]struct{}, 0) //мапа уникальных слов
-	result := make([]string, 0)       //слайс уникальных слов
-
-	for _, v := range *words {
-		if _, exists := m[v]; !exists {
-			m[v] = struct{}{}
-			result = append(result, v)
-		}
-	}
-	return &result
+// Вспомогательная функция для сортировки символов в слове
+func sortString(str string) string {
+	s := strings.Split(str, "")
+	sort.Strings(s)
+	return strings.Join(s, "")
 }
 
 func main() {
-	a := *SearchAnagrams(&[]string{"пятак", "пятка", "тяпка", "соль", "лось"})
-	for k, v := range a {
-		fmt.Println(k, *v)
+	// Пример использования функции
+	words := []string{"пятак", "пятка", "тяпка", "листок", "слиток", "столик"}
+
+	anagramSets := findAnagramSets(&words)
+
+	for _, value := range *anagramSets {
+		fmt.Printf("Множество анаграмм для слова %s: %v\n", value[0], value)
 	}
 }

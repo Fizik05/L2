@@ -2,116 +2,94 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
-	"syscall"
 )
 
 /*
 === Взаимодействие с ОС ===
-Необходимо реализовать свой собственный UNIX-шелл-утилиту с поддержкой ряда простейших команд:
 
+Необходимо реализовать собственный шелл
 
-- cd <args> - смена директории (в качестве аргумента могут быть то-то и то)
-- pwd - показать путь до текущего каталога
-- echo <args> - вывод аргумента в STDOUT
-- kill <args> - "убить" процесс, переданный в качесте аргумента (пример: такой-то пример)
-- ps - выводит общую информацию по запущенным процессам в формате *такой-то формат*
+встроенные команды: cd/pwd/echo/kill/ps
+поддержать fork/exec команды
+конвеер на пайпах
 
-
-
-
-Так же требуется поддерживать функционал fork/exec-команд
-
-
-Дополнительно необходимо поддерживать конвейер на пайпах (linux pipes, пример cmd1 | cmd2 | .... | cmdN).
-
-
-*Шелл — это обычная консольная программа, которая будучи запущенной, в интерактивном сеансе выводит некое приглашение
-в STDOUT и ожидает ввода пользователя через STDIN. Дождавшись ввода, обрабатывает команду согласно своей логике
-и при необходимости выводит результат на экран. Интерактивный сеанс поддерживается до тех пор, пока не будет введена команда выхода (например \quit).
+Реализовать утилиту netcat (nc) клиент
+принимать данные из stdin и отправлять в соединение (tcp/udp)
+Программа должна проходить все тесты. Код должен проходить проверки go vet и golint.
 */
 
-func execInput(input string) error {
-	input = strings.TrimSuffix(input, "\n")
-
-	parts := strings.Fields(input)
-	if len(parts) == 0 {
-		return nil
-	}
-
-	switch parts[0] {
-
-	case "cd":
-		if len(parts) < 2 {
-			return errors.New("cd: no directory")
-		}
-		err := os.Chdir(parts[1])
-		return err
-
-	case "pwd":
-		dir, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(os.Stdout, dir)
-
-	case "echo":
-		cmd := exec.Command(parts[0], parts[1:]...)
-		output, err := cmd.Output()
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(os.Stdout, string(output))
-
-	case "kill":
-		if len(parts) < 2 {
-			return errors.New("kill: no pid")
-		}
-		cmd := exec.Command("kill", parts[1])
-		output, err := cmd.Output()
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(os.Stdout, string(output))
-	case "ps":
-		cmd := exec.Command("ps", parts[1:]...)
-		output, err := cmd.Output()
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(os.Stdout, string(output))
-	default:
-
-	}
-	return nil
-}
-
 func main() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGQUIT)
-
-	go func() {
-		<-sigChan
-	}()
-
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
+		// Выводим приглашение на экран
 		fmt.Print("> ")
 
-		input, err := reader.ReadString('\n')
+		// Читаем команду из ввода пользователя
+		command, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			fmt.Println("Ошибка чтения команды:", err)
 			continue
 		}
 
-		if err = execInput(input); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+		// Удаляем символы новой строки из команды
+		command = strings.TrimSuffix(command, "\n")
+
+		// Обработка введенной команды
+		switch {
+		case command == "quit":
+			// Завершаем выполнение программы
+			return
+		case strings.HasPrefix(command, "cd"):
+			// Изменяем текущую директорию
+			args := strings.TrimSpace(strings.TrimPrefix(command, "cd"))
+			err := os.Chdir(args)
+			if err != nil {
+				fmt.Println("Ошибка смены директории:", err)
+			}
+		case command == "pwd":
+			// Выводим текущую директорию
+			wd, err := os.Getwd()
+			if err != nil {
+				fmt.Println("Ошибка получения текущей директории:", err)
+			}
+			fmt.Println(wd)
+		case strings.HasPrefix(command, "echo"):
+			// Выводим аргументы на экран
+			args := strings.TrimSpace(strings.TrimPrefix(command, "echo"))
+			fmt.Println(args)
+		case strings.HasPrefix(command, "kill"):
+			// "Убиваем" процесс
+			args := strings.TrimSpace(strings.TrimPrefix(command, "kill"))
+			cmd := exec.Command("kill", args)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				fmt.Println("Ошибка выполнения команды kill:", err)
+			}
+		case command == "ps":
+			// Выводим информацию о текущих процессах
+			cmd := exec.Command("ps")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				fmt.Println("Ошибка выполнения команды ps:", err)
+			}
+		default:
+			// Выполняем команду через shell
+			cmd := exec.Command("bash", "-c", command)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				fmt.Println("Ошибка выполнения команды:", err)
+			}
 		}
 	}
 }
